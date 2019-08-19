@@ -1,15 +1,26 @@
-from statsmodels.compat.python import (lrange, iterkeys, iteritems, lzip,
-                                       reduce, itervalues, zip, string_types,
-                                       range)
-from statsmodels.compat.collections import OrderedDict
-import numpy as np
-import pandas as pd
+"""
+"""
+# COPY TO: C:\Users\jrilla\AppData\Local\Continuum\anaconda3\Lib\site-packages\statsmodels\iolib
+
+
 import datetime
 import textwrap
+
+import os
+import roman
+
+import numpy as np
+import pandas as pd
+from collections import OrderedDict
+from statsmodels.compat.python import (
+    iteritems, iterkeys, itervalues, lrange, lzip, range, reduce, string_types,
+    zip)
 # from .table import SimpleTable
 # from .tableformatting import fmt_latex, fmt_txt
 from statsmodels.iolib.table import SimpleTable
 from statsmodels.iolib.tableformatting import fmt_latex, fmt_txt
+from collections import defaultdict
+
 
 class Summary(object):
     def __init__(self):
@@ -156,7 +167,7 @@ class Summary(object):
         pad_col, pad_index, widest = _measure_tables(tables, settings)
 
         rule_equal = widest * '='
-        #TODO: this isn't used anywhere?
+        # TODO: this isn't used anywhere?
         rule_dash = widest * '-'
 
         simple_tables = _simple_tables(tables, settings, pad_col, pad_index)
@@ -171,7 +182,7 @@ class Summary(object):
         if title is not None:
             title = title
             if len(title) < widest:
-                title = ' ' * int(widest/2 - len(title)/2) + title
+                title = ' ' * int(widest / 2 - len(title) / 2) + title
         else:
             title = ''
 
@@ -189,7 +200,7 @@ class Summary(object):
 
         tables = self.tables
         settings = self.settings
-        #TODO: this isn't used anywhere
+        # TODO: this isn't used anywhere
         title = self.title
 
         simple_tables = _simple_tables(tables, settings)
@@ -216,30 +227,72 @@ class Summary(object):
         out = '\\begin{table}', title, tab, '\\end{table}'
         out = '\n'.join(out)
         return out
-    # I added the output method based on pd.DataFrame().to_excel/csv(). 
-    # I merged  the results when they are output, mainly in order to make 
-    #  the output be distinguishable and more beautiful when printing. 
+    # I added the output method based on pd.DataFrame().to_excel/csv().
+    # I merged  the results when they are output, mainly in order to make
+    #  the output be distinguishable and more beautiful when printing
     #  Maybe there are other better ways.
-    def to_excel(self,path=None):
+
+    def to_excel(self, path=None):
         tables = self.tables
-        import  os
+        
         cwd = os.getcwd()
         if path:
             path = path 
         else:
             path = cwd + '\\summary_results.xlsx'
-        summ_df = pd.concat(tables,axis=0)
+        summ_df = pd.concat(tables, axis=0)
         return summ_df.to_excel(path)
-    def to_csv(self,path=None):
+
+    def to_csv(self, path=None):
         tables = self.tables
-        import  os
         cwd = os.getcwd()
-        if  path:
+        if path:
             path = path 
         else:
             path = cwd + '\\summary_results.csv'
-        summ_df = pd.concat(tables,axis=0)
+        summ_df = pd.concat(tables, axis=0)
         return summ_df.to_csv(path)
+
+    def to_latex_string(self):
+        """
+        Improved to latex function, returning a table string that can be
+        directly copied into latex (or written to .tex file)
+        """
+        # change column names
+        new_cols = _make_unique_latex(self.tables[1].columns.to_list())
+        self.tables[1].columns = new_cols
+
+        # '.to-latex()' both param and specs tables
+        param_latex = self.tables[1].to_latex(escape=False, column_format=f"l{self.tables[1].shape[1] * 'c'}", bold_rows=True)
+        specs_latex = self.tables[2].to_latex(escape=False, bold_rows=True)
+
+        # both are within tabular environment, split up so the can be joined to one
+        param_latex = param_latex.split("\\bottomrule\n")[0]
+        specs_latex = specs_latex.split("\midrule\n")[-1]
+
+        # add midrule between params and specs
+        to_latex = "\midrule\n".join([param_latex, specs_latex])
+
+        # create note
+        notes = "".join(self.tables[3].index.to_list()).replace("\t", "")
+        notes = notes.replace("note", "Note")
+        notes = notes.replace("<", "$<$")
+
+        # add notes
+        to_latex = to_latex.replace(
+            "\\\\\n\\bottomrule",
+            f"\\\\\n\\bottomrule \\\\\n\\multicolumn{{{self.tables[1].shape[1] + 1}}}{{l}}{{{notes}}}",
+        )
+
+        # replace other words
+        # to_latex = to_latex.replace('Eeffects', 'FE')
+
+        # delete ':'
+        to_latex = to_latex.replace(':', '')
+        # replace aligning
+        # \\begin{tabular}{llll}
+        return to_latex
+
 
 def _measure_tables(tables, settings):
     '''Compare width of ascii tables in a list and calculate padding values.
@@ -249,13 +302,13 @@ def _measure_tables(tables, settings):
     '''
 
     simple_tables = _simple_tables(tables, settings)
-    
-    #Bug1: If tables or settings is an empty list, 
-             # then _simple_tables() will return [].
-             # that means length is also empty , 
-             # so max() will raise an error. 
-    #Bug2: If table[i] just has one column, '/nsep' will raise ZeroDivisionError. 
-             # So I added exception capture codes as follows.
+
+    # Bug1: If tables or settings is an empty list,
+    # then _simple_tables() will return [].
+    # that means length is also empty ,
+    # so max() will raise an error
+    # Bug2: If table[i] just has one column, '/nsep' will raise ZeroDivisionError.
+    # So I added exception capture codes as follows.
 
     if simple_tables == []:
         len_max = 0
@@ -282,13 +335,13 @@ def _measure_tables(tables, settings):
 
 
 # Useful stuff
-_model_types = {'OLS' : 'Ordinary least squares',
-                'GLS' : 'Generalized least squares',
-                'GLSAR' : 'Generalized least squares with AR(p)',
-                'WLS' : 'Weigthed least squares',
-                'RLM' : 'Robust linear model',
+_model_types = {'OLS': 'Ordinary least squares',
+                'GLS': 'Generalized least squares',
+                'GLSAR': 'Generalized least squares with AR(p)',
+                'WLS': 'Weigthed least squares',
+                'RLM': 'Robust linear model',
                 'NBin': 'Negative binomial model',
-                'GLM' : 'Generalized linear model'
+                'GLM': 'Generalized linear model'
                 }
 
 
@@ -320,7 +373,7 @@ def summary_model(results):
     info['Scale Est.:'] = lambda x: x.fit_options['scale_est']
     info['Cov. Type:'] = lambda x: x.fit_options['cov']
     # 2
-    #I add the x.cov_type because there is no attribute fit_options like OLS model
+    # I add the x.cov_type because there is no attribute fit_options like OLS model
     info['Covariance Type:'] = lambda x: x.cov_type
     info['Covariance Type:'] = lambda x: x._cov_type
 
@@ -391,7 +444,7 @@ def summary_params(results, yname=None, xname=None, alpha=.05, use_t=True,
     from linearmodels.panel.results import RandomEffectsResults 
     from linearmodels.panel.results import PanelResults
 
-    res_tuple = (PanelEffectsResults,PanelResults,RandomEffectsResults)
+    res_tuple = (PanelEffectsResults, PanelResults, RandomEffectsResults)
 
     if isinstance(results, tuple):
         results, params, std_err, tvalues, pvalues, conf_int = results
@@ -402,13 +455,13 @@ def summary_params(results, yname=None, xname=None, alpha=.05, use_t=True,
     #     pvalues = results.pvalues
     #     conf_int = results.conf_int(alpha)
    
-   # I added Panel results whose some attributes name are different.
-   # So I modified the code as follows.
+    # I added Panel results whose some attributes name are different.
+    # So I modified the code as follows.
 
-    elif isinstance(results,res_tuple):
+    elif isinstance(results, res_tuple):
         bse = results.std_errors
         tvalues = results.tstats
-        conf_int = results.conf_int(1-alpha)
+        conf_int = results.conf_int(1 - alpha)
     else:
         bse = results.bse
         tvalues = results.tvalues
@@ -422,16 +475,16 @@ def summary_params(results, yname=None, xname=None, alpha=.05, use_t=True,
 
     if use_t:
         data.columns = ['Coef.', 'Std.Err.', 't', 'P>|t|',
-                        '[' + str(alpha/2), str(1-alpha/2) + ']']
+                        '[' + str(alpha / 2), str(1 - alpha / 2) + ']']
     else:
         data.columns = ['Coef.', 'Std.Err.', 'z', 'P>|z|',
-                        '[' + str(alpha/2), str(1-alpha/2) + ']']
+                        '[' + str(alpha / 2), str(1 - alpha / 2) + ']']
 
     if not xname:
         # data.index = results.model.exog_names
         try:
             data.index = results.model.exog_names
-        except (AttributeError):
+        except (AttributeError, TypeError):
             data.index = results.model.exog.vars
     else:
         data.index = xname
@@ -471,20 +524,22 @@ def summary_params(results, yname=None, xname=None, alpha=.05, use_t=True,
 #     res = res.stack()
 #     res = pd.DataFrame(res)
 #     res.columns = [str(result.model.endog_names)]
-def _col_params(result, float_format='%.4f', stars=True,show='t'):
+
+
+def _col_params(result, float_format='%.4f', stars=True, show='t'):
     '''Stack coefficients and standard errors in single column
     '''
-      #I add the parameter 'show' equals 't' to display tvalues by default,
-      #'p' for pvalues and 'se' for std.err are alternative.
-    
+    # I add the parameter 'show' equals 't' to display tvalues by default,
+    # 'p' for pvalues and 'se' for std.err are alternative.
+
     # Extract parameters
     res = summary_params(result)
     # Format float
     # Note that scientific number will be formatted to 'str' type though '%.4f'
     for col in res.columns[:3]:
         res[col] = res[col].apply(lambda x: float_format % x)
-    res.iloc[:,3] = np.around(res.iloc[:,3],4)
-    
+    res.iloc[:, 3] = np.around(res.iloc[:, 3], 4)
+
     # Significance stars
     # .ix method will be depreciated,so .loc is used.
     if stars:
@@ -495,23 +550,23 @@ def _col_params(result, float_format='%.4f', stars=True,show='t'):
         idx = res.iloc[:, 3] < .01
         res.loc[res.index[idx], res.columns[0]] += '*'
     # Std.Errors or tvalues or  pvalues in parentheses
-    res.iloc[:,3] = res.iloc[:,3].apply(lambda x: float_format % x) # pvalues to str
+    res.iloc[:, 3] = res.iloc[:, 3].apply(lambda x: float_format % x)  # pvalues to str
     res.iloc[:, 1] = '(' + res.iloc[:, 1] + ')'
     res.iloc[:, 2] = '(' + res.iloc[:, 2] + ')'
     res.iloc[:, 3] = '(' + res.iloc[:, 3] + ')'
 
     # Stack Coefs and Std.Errors or pvalues
-    if show is 't':
-        res = res.iloc[:,[0,2]]
-    elif show is 'se':
+    if show == 't':
+        res = res.iloc[:, [0, 2]]
+    elif show == 'se':
         res = res.iloc[:, :2]
-    elif show is 'p':
-        res = res.iloc[:,[0,3]]
+    elif show == 'p':
+        res = res.iloc[:, [0, 3]]
     res = res.stack()
     res = pd.DataFrame(res)
     try:
         res.columns = [str(result.model.endog_names)]
-    except (AttributeError):
+    except (AttributeError, TypeError):
         res.columns = result.model.dependent.vars
     
     # I added the index name transfromation function 
@@ -519,7 +574,7 @@ def _col_params(result, float_format='%.4f', stars=True,show='t'):
     def _Intercept_2const(df):
         from pandas.core.indexes.multi import MultiIndex
         if df.index.contains('Intercept'):
-            if isinstance(df.index,MultiIndex):
+            if isinstance(df.index, MultiIndex):
                 new_index = []
                 for i in df.index.values:
                     i = list(i)
@@ -555,41 +610,42 @@ def _col_params(result, float_format='%.4f', stars=True,show='t'):
 #     out = pd.DataFrame({str(result.model.endog_names): out}, index=index)
 #     return out
    
-   # I modified the above function,main work is that 
-   # I rename the parameter 'info_dict' to 'more_info',which is a list not a dict.
-   # Besides, I build a default dict to contain some model information 
-   # from summary_model(), that will be printed by default and 
-   # users can append other statistics by more_info parameter.
+    # I modified the above function,main work is that 
+    # I rename the parameter 'info_dict' to 'more_info',which is a list not a dict.
+    # Besides, I build a default dict to contain some model information 
+    # from summary_model(), that will be printed by default and 
+    # users can append other statistics by more_info parameter.
+
+
 def _col_info(result, more_info=None):
     '''Stack model info in a column
     '''
     model_info = summary_model(result)
     default_info_ = OrderedDict()
-    default_info_['Model:'] = lambda x: x.get('Model:')
-    default_info_['No. Observations:'] = lambda x: x.get('No. Observations:')
-    default_info_['R-squared:'] = lambda x: x.get('R-squared:')
-    default_info_['Adj. R-squared:'] = lambda x: x.get('Adj. R-squared:')                    
-    default_info_['Pseudo R-squared:'] = lambda x: x.get('Pseudo R-squared:')
-    default_info_['F-statistic:'] = lambda x: x.get('F-statistic:')
-    default_info_['Covariance Type:'] = lambda x: x.get('Covariance Type:')
-    default_info_['Eeffects:'] = lambda x: x.get('Effects:')
-    default_info_['Covariance Type:'] = lambda x: x.get('Covariance Type:')
+    default_info_['Model'] = lambda x: x.get('Model:')
+    default_info_['No. Observations'] = lambda x: x.get('No. Observations:')
+    default_info_['R-squared'] = lambda x: x.get('R-squared:')
+    default_info_['Adj. R-squared'] = lambda x: x.get('Adj. R-squared:')                    
+    default_info_['Pseudo R-squared'] = lambda x: x.get('Pseudo R-squared:')
+    # default_info_['F-statistic:'] = lambda x: x.get('F-statistic:')
+    default_info_['Covariance Type'] = lambda x: x.get('Covariance Type:')
+    default_info_['Effects'] = lambda x: x.get('Effects:')
 
     default_info = default_info_.copy()
-    for k,v in default_info_.items():
+    for k, v in default_info_.items():
         if v(model_info):
             default_info[k] = v(model_info)
         else:
-            default_info.pop(k) # pop the item whose value is none.
+            default_info.pop(k)  # pop the item whose value is none.
             
     if more_info is None:
         more_info = default_info
     else:
-        if not isinstance(more_info,list):
+        if not isinstance(more_info, list):
             more_info = [more_info]
         for i in more_info:
             try:
-                default_info[i] = getattr(result,i)
+                default_info[i] = getattr(result, i)
             except (AttributeError, KeyError, NotImplementedError) as e:
                 raise e
         more_info = default_info
@@ -611,38 +667,61 @@ def _col_info(result, more_info=None):
 #         header.append(_name+" " + name_counter[_name])
 #     return header
 
-   # Above function has a flaw that non-duplicated names will be add a suffix.
-   # And the time when endog_names duplicate four or more times ,the y 
-   # names will be like 'y IIII' or 'y IIIIII...'.So I used the Arabic numerals.
+    # Above function has a flaw that non-duplicated names will be add a suffix.
+    # And the time when endog_names duplicate four or more times ,the y 
+    # names will be like 'y IIII' or 'y IIIIII...'.So I used the Arabic numerals.
+
+
 def _make_unique(list_of_names):
     if len(set(list_of_names)) == len(list_of_names):
         return list_of_names
     # pandas does not like it if multiple columns have the same names
-    from collections import defaultdict
+    
     dic_of_names = defaultdict(list)
-    for i,v in enumerate(list_of_names):
+    for i, v in enumerate(list_of_names):
         dic_of_names[v].append(i)
-    for v in  dic_of_names.values():
-        if len(v)>1:
+    for v in dic_of_names.values():
+        if len(v) > 1:
             c = 0
             for i in v:
                 c += 1
                 list_of_names[i] += '_%i' % c
     return list_of_names
 
-   # The following function is the most critical to work.
-   # In this function  I added the parameters 'show' and 'title',
-   # and changed the default value of 'stars' into 'True',
-   # Then  I changed the dict parameter 'info_dict' as a list one named 'more_info'.
-   # Finally I put 'const'  at the first location by default in regressor_order.
 
-   # Bug: np.unique() will disrupt the original order of list,
-   # this can result in index confusion.
+def _make_unique_latex(list_of_names):
+    """
+    Prepares a names list with the latex Thead method from the makecell package
+    to get a multiline name with greek numbers
+    """
+    # correct previous unique making efforts
+    list_of_names = [x[:-2] if x[-2] == '_' else x for x in list_of_names]
+
+    if len(set(list_of_names)) == len(list_of_names):
+        return list_of_names
+    elif len(set(list_of_names)) == 1:
+        return [f"({roman.toRoman(x)})" for x in range(1, 1 + len(list_of_names))]
+    else:
+        return [
+            f"\\thead{{ ({roman.toRoman(x + 1)}) \\\\ {j}}}"
+            for x, j in enumerate(list_of_names)
+        ]
+
+    # The following function is the most critical to work.
+    # In this function  I added the parameters 'show' and 'title',
+    # and changed the default value of 'stars' into 'True',
+    # Then  I changed the dict parameter 'info_dict' as a list one named 'more_info'.
+    # Finally I put 'const'  at the first location by default in regressor_order.
+
+    # Bug: np.unique() will disrupt the original order of list,
+    # this can result in index confusion.
 
 # def summary_col(results, float_format='%.4f', model_names=[], stars=False,
-#                 info_dict=None, regressor_order=[]): 
+#                 info_dict=None, regressor_order=[]):
+
+
 def summary_col(results, float_format='%.4f', model_names=[], stars=True,
-                more_info=None, regressor_order=[],show='t',title=None): 
+                more_info=None, regressor_order=[], show='t', title=None): 
     # I added the parameter 'show' and changed the default of 'stars' into 'True',
     # then renamed the dict parameter 'info_dict' as a list one 'more_info'
     # finally assigned the regressor_order a initial value ['const']
@@ -659,8 +738,8 @@ def summary_col(results, float_format='%.4f', model_names=[], stars=True,
         unique, a roman number will be appended to all model names
     stars : bool
         print significance stars
-    info_dict : dict
-        dict of lambda functions to be applied to results instances to retrieve
+    more_info : list
+        dict of functions to be applied to results instances to retrieve
         model info. To use specific information for different models, add a
         (nested) info_dict with model name as the key.
         Example: `info_dict = {"N":..., "R2": ..., "OLS":{"R2":...}}` would
@@ -668,15 +747,19 @@ def summary_col(results, float_format='%.4f', model_names=[], stars=True,
         all other results.
         Default : None (use the info_dict specified in
         result.default_model_infos, if this property exists)
-    regressor_order : list of strings
+    regressor_order : list of strings, optional
         list of names of the regressors in the desired order. All regressors
         not specified will be appended to the end of the list.
+    drop_omitted : bool, optional
+        Includes regressors that are not specified in regressor_order. If False,
+        regressors not specified will be appended to end of the list. If True,
+        only regressors in regressors_list will be included.
     """
     
     if not isinstance(results, list):
         results = [results]
 
-    cols = [_col_params(x, stars=stars, float_format=float_format,show=show) for x in
+    cols = [_col_params(x, stars=stars, float_format=float_format, show=show) for x in
             results]
 
     # Unique column names (pandas has problems merging otherwise)
@@ -722,14 +805,23 @@ def summary_col(results, float_format='%.4f', model_names=[], stars=True,
 #     else:
 #         cols = [_col_info(x, getattr(x, "default_model_infos", None)) for x in
 #                 results]
-    cols = [_col_info(x,more_info=more_info) for x in results]
-    
+    cols = [_col_info(x, more_info=more_info) for x in results]
     # use unique column names, otherwise the merge will not succeed
-    for df , name in zip(cols, _make_unique([df.columns[0] for df in cols])):
+    index = [] # merg will change the order on the index, so get back original order
+    for df, name in zip(cols, _make_unique([df.columns[0] for df in cols])):
         df.columns = [name]
+        index = df.index.to_list()
+
     merg = lambda x, y: x.merge(y, how='outer', right_index=True,
                                 left_index=True)
     info = reduce(merg, cols)
+
+    # removes duplicates from index
+    index= list(dict.fromkeys(index))
+
+    #reindex
+    info = info.reindex(index=index)
+    
     info.columns = summ.columns
     info = info.fillna('')
 #     dat = pd.DataFrame(np.vstack([summ, info]))  # pd.concat better, but error
@@ -746,21 +838,22 @@ def summary_col(results, float_format='%.4f', model_names=[], stars=True,
 #         smry.add_text('* p<.1, ** p<.05, ***p<.01')*p<.01')
 #     return smry
 
-    if show is 't':
+    if show == 't':
         note = ['\t t statistics in parentheses.']
-    if show is 'se':
+    if show == 'se':
         note = ['\t Std. error in parentheses.']
-    if show is 'p':
+    if show == 'p':
         note = ['\t pvalues in parentheses.']
     if stars:
-        note +=  ['\t * p<.1, ** p<.05, ***p<.01']
-    #Here  I tried two ways to put extra text in index-location 
+        note += ['\t * p<.1, ** p<.05, ***p<.01']
+    # Here  I tried two ways to put extra text in index-location 
     # or columns-location,finally found the former is better.
 #     note_df = pd.DataFrame(note,index=['note']+['']*(len(note)-1),columns=[summ.columns[0]])
-    note_df = pd.DataFrame([ ],index=['note:']+note,columns=summ.columns).fillna('')
+    note_df = pd.DataFrame([], index=['note:'] + note, columns=summ.columns).fillna('')
 #     summ_all = pd.concat([summ,info,note_df],axis=0)
     
-    # I construct a title DataFrame and adjust the location of title corresponding to the length of columns. 
+    # I construct a title DataFrame and adjust the location of title
+    # corresponding to the length of columns. 
     if title is not None:
         title = str(title)
     else:
@@ -779,15 +872,14 @@ def summary_col(results, float_format='%.4f', model_names=[], stars=True,
     #     i = int(col_len/2)
     # fake_data[i-1] = title
     # title_df = pd.DataFrame([fake_data],index=[''],columns=summ.columns).fillna('')
-    title_df = pd.DataFrame([],index=[title],columns=summ.columns).fillna('')
+    title_df = pd.DataFrame([], index=[title], columns=summ.columns).fillna('')
     
     smry = Summary()
-    smry.add_df(title_df,header=False,align='l')
+    smry.add_df(title_df, header=False, align='l')
     smry.add_df(summ, header=True, align='l')
     smry.add_df(info, header=False, align='l')
     smry.add_df(note_df, header=False, align='l')
     return smry
-
 
 
 def _formatter(element, float_format='%.4f'):
