@@ -298,18 +298,36 @@ class Summary(object):
         # add midrule between params and specs
         to_latex = "\midrule\n".join([param_latex, specs_latex])
 
-        # create note
-        notes = "".join(self.tables[3].index.to_list()).replace("\t", "")
-        notes = notes.replace("note", "Note")
-        notes = notes.replace("<", "$<$")
+        if self.tables[3].shape[0] > 3:
+            # create notes
+            note1 = "".join(self.tables[3].index.to_list()[:-1]).replace("\t", "")
+            note1 = note1.replace("note", "Notes")
+            note1 = note1.replace("<", "$<$")
 
-        # add notes
-        to_latex = to_latex.replace(
-            "\\\\\n\\bottomrule",
-            f"\\\\\n\\bottomrule \\\\\n\\multicolumn{{{self.tables[1].shape[1] + 1}}}{{l}}{{{notes}}}",
-        )
+            note2 = self.tables[3].index.to_list()[-1]
 
-        to_latex = to_latex.replace(":", "")
+            # add notes
+            to_latex = to_latex.replace(
+                "\\\\\n\\bottomrule",
+                (
+                    f"\\\\\n\\bottomrule \\\\\n\\multicolumn{{{self.tables[1].shape[1] + 1}}}{{l}}{{{note1}}}"
+                    f"\\\\\n\\multicolumn{{{self.tables[1].shape[1] + 1}}}{{l}}{{{note2}}}"
+                ),
+            )
+        
+        else:
+            # create note
+            notes = "".join(self.tables[3].index.to_list()).replace("\t", "")
+            notes = notes.replace("note", "Note")
+            notes = notes.replace("<", "$<$")
+
+            # add notes
+            to_latex = to_latex.replace(
+                "\\\\\n\\bottomrule",
+                f"\\\\\n\\bottomrule \\\\\n\\multicolumn{{{self.tables[1].shape[1] + 1}}}{{l}}{{{notes}}}",
+            )
+
+        # to_latex = to_latex.replace(":", "")
         return to_latex
 
 
