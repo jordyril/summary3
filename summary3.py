@@ -761,10 +761,10 @@ def _make_unique_latex(list_of_names):
     # correct previous unique making efforts
     list_of_names = [x[:-2] if x[-2] == "_" else x for x in list_of_names]
 
-    if len(set(list_of_names)) == len(list_of_names):
-        return list_of_names
-    elif len(set(list_of_names)) == 1:
+    if len(set(list_of_names)) == 1:
         return [f"({roman.toRoman(x)})" for x in range(1, 1 + len(list_of_names))]
+    # elif len(set(list_of_names)) == len(list_of_names):
+    #     return list_of_names
     else:
         return [
             f"\\thead{{ ({roman.toRoman(x + 1)}) \\\\ {j}}}"
