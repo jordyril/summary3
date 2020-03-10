@@ -8,6 +8,7 @@ import textwrap
 
 import os
 import roman
+import re
 
 import numpy as np
 import pandas as pd
@@ -284,12 +285,20 @@ class Summary(object):
         self.tables[1].columns = new_cols
 
         # '.to-latex()' both param and specs tables
+        #  Param table
         param_latex = self.tables[1].to_latex(
             escape=False,
             column_format=f"l{self.tables[1].shape[1] * 'c'}",
             bold_rows=True,
         )
-        specs_latex = self.tables[2].to_latex(escape=False, bold_rows=True)
+        # Spec table - but first 'unbracket' 'effects
+        spec_table = self.tables[2]
+        try:
+            spec_table.loc['Effects'] = spec_table.loc['Effects'].apply(
+                _unbracket_text)
+        except KeyError:
+            pass
+        specs_latex = spec_table.to_latex(escape=False, bold_rows=True)
 
         # both are within tabular environment, split up so the can be joined to one
         param_latex = param_latex.split("\\bottomrule\n")[0]
@@ -300,7 +309,8 @@ class Summary(object):
 
         if self.tables[3].shape[0] > 3:
             # create notes
-            note1 = "".join(self.tables[3].index.to_list()[:-1]).replace("\t", "")
+            note1 = "".join(self.tables[3].index.to_list()[
+                            :-1]).replace("\t", "")
             note1 = note1.replace("note", "Notes")
             note1 = note1.replace("<", "$<$")
 
@@ -314,7 +324,7 @@ class Summary(object):
                     f"\\\\\n\\multicolumn{{{self.tables[1].shape[1] + 1}}}{{l}}{{{note2}}}"
                 ),
             )
-        
+
         else:
             # create note
             notes = "".join(self.tables[3].index.to_list()).replace("\t", "")
@@ -329,6 +339,16 @@ class Summary(object):
 
         # to_latex = to_latex.replace(":", "")
         return to_latex
+
+
+def _unbracket_text(text):
+    """
+    Help function to extract any text within brackets
+    """
+    try:
+        return re.search(r'\((.*?)\)', text).group(1)
+    except AttributeError:
+        return text
 
 
 def _measure_tables(tables, settings):
@@ -440,7 +460,8 @@ def summary_model(results):
 
     info["Scale:"] = lambda x: "%#8.5g" % x.scale
     # 6
-    info["Effects:"] = lambda x: ",".join(["%#8s" % i for i in x.included_effects])
+    info["Effects:"] = lambda x: ",".join(
+        ["%#8s" % i for i in x.included_effects])
 
     out = OrderedDict()
     for key, func in iteritems(info):
@@ -559,7 +580,7 @@ def summary_params(
 # for example, an OLS model named it 'Intercept' while 'const' in logit models.
 # So I also added a function to uniform the name to facilitate the data merge.
 
-## Vertical summary instance for multiple models
+# Vertical summary instance for multiple models
 # def _col_params(result, float_format='%.4f', stars=True):
 #     '''Stack coefficients and standard errors in single column
 #     '''
@@ -610,7 +631,8 @@ def _col_params(result, float_format="%.4f", stars=True, show="t"):
         idx = res.iloc[:, 3] < 0.01
         res.loc[res.index[idx], res.columns[0]] += "*"
     # Std.Errors or tvalues or  pvalues in parentheses
-    res.iloc[:, 3] = res.iloc[:, 3].apply(lambda x: float_format % x)  # pvalues to str
+    res.iloc[:, 3] = res.iloc[:, 3].apply(
+        lambda x: float_format % x)  # pvalues to str
     res.iloc[:, 1] = "(" + res.iloc[:, 1] + ")"
     res.iloc[:, 2] = "(" + res.iloc[:, 2] + ")"
     res.iloc[:, 3] = "(" + res.iloc[:, 3] + ")"
@@ -845,7 +867,8 @@ def summary_col(
     for i in range(len(cols)):
         cols[i].columns = [colnames[i]]
 
-    merg = lambda x, y: x.merge(y, how="outer", right_index=True, left_index=True)
+    def merg(x, y): return x.merge(
+        y, how="outer", right_index=True, left_index=True)
     summ = reduce(merg, cols)
 
     # if regressor_order:
@@ -862,7 +885,7 @@ def summary_col(
     # order = ordered + list(np.unique(unordered))
     order = ordered + list(pd.Series(unordered).unique())
 
-    f = lambda idx: sum([[x + "coef", x + "stde"] for x in idx], [])
+    def f(idx): return sum([[x + "coef", x + "stde"] for x in idx], [])
     # summ.index = f(np.unique(varnames))
     summ.index = f(pd.Series(varnames).unique())
     summ = summ.reindex(f(order))
@@ -886,7 +909,8 @@ def summary_col(
         df.columns = [name]
         index = df.index.to_list()
 
-    merg = lambda x, y: x.merge(y, how="outer", right_index=True, left_index=True)
+    def merg(x, y): return x.merge(
+        y, how="outer", right_index=True, left_index=True)
     info = reduce(merg, cols)
 
     # removes duplicates from index
@@ -922,7 +946,8 @@ def summary_col(
     # Here  I tried two ways to put extra text in index-location
     # or columns-location,finally found the former is better.
     #     note_df = pd.DataFrame(note,index=['note']+['']*(len(note)-1),columns=[summ.columns[0]])
-    note_df = pd.DataFrame([], index=["note:"] + note, columns=summ.columns).fillna("")
+    note_df = pd.DataFrame([], index=["note:"] + note,
+                           columns=summ.columns).fillna("")
     #     summ_all = pd.concat([summ,info,note_df],axis=0)
 
     # I construct a title DataFrame and adjust the location of title
