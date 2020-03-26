@@ -1,7 +1,7 @@
 """
 """
 # COPY TO: C:\Users\jrilla\AppData\Local\Continuum\anaconda3\Lib\site-packages\statsmodels\iolib
-
+# or C:\Users\jordy\Anaconda3\Lib\site-packages\statsmodels\iolib
 
 import datetime
 import textwrap
@@ -291,13 +291,19 @@ class Summary(object):
             column_format=f"l{self.tables[1].shape[1] * 'c'}",
             bold_rows=True,
         )
-        # Spec table - but first 'unbracket' 'effects
+        # Spec table
+        # First 'unbracket' 'effects
         spec_table = self.tables[2]
         try:
             spec_table.loc['Effects'] = spec_table.loc['Effects'].apply(
                 _unbracket_text)
         except KeyError:
             pass
+        # Second, change model names
+        model_dic = {'PanelOLS': 'Panel', 'FirstDifferenceOLS': 'FD'}
+        spec_table.loc['Model'] = spec_table.loc['Model'].apply(
+            lambda x: model_dic[x] if x in model_dic else x)
+
         specs_latex = spec_table.to_latex(escape=False, bold_rows=True)
 
         # both are within tabular environment, split up so the can be joined to one
